@@ -1,52 +1,71 @@
 package fr.bascode;
 
 import com.sun.net.httpserver.HttpServer;
+import fr.bascode.handlers.Esp8266;
 import fr.bascode.handlers.RootHandler;
 
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class cafeapi {
-    public static void main(String[] args) throws IOException, InterruptedException {
+
+    public static int statusMachine = 0;
+
+    public static void main(String[] args) throws IOException, InterruptedException, NoSuchAlgorithmException {
         demarrageApi();
-        demarrageWebsocket();
+        demarrageConsoleInput();
     }
-
-    private static void demarrageWebsocket() throws IOException, InterruptedException {
-        BufferedReader sysin = new BufferedReader(new InputStreamReader(System.in));
-        ServerSocket listener = new ServerSocket(9090);
-        try{
-            while(true){
-                String sin = sysin.readLine();
-                System.out.println("Vous avez entré: " + sin);
-                Socket socket = listener.accept();
-                socket.setKeepAlive(true);
-                System.out.println("Client Connected");
-                try{
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    System.out.println("Client response: " + in.readLine());
-
-                    BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-                    System.out.println("Sending Message...");
-                    out.write("Hello\n from Java!\n");
-                    out.flush();
-                } finally {
-                    socket.close();
+    public static void demarrageConsoleInput() {
+        new Thread(() -> {
+            while (true) {
+                try {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+                    String line = reader.readLine();
+                    if (line.equals("exit")) {
+                        System.exit(0);
+                    }
+                    if (line.equals("help")) {
+                        System.out.println("Liste des commandes :");
+                        System.out.println("exit : Quitter l'application");
+                        System.out.println("help : Afficher la liste des commandes");
+                        System.out.println("send : Envoyer un message à tous les clients");
+                    }
+                    if (line.startsWith("set")) {
+                        statusMachine = Integer.parseInt(line.split(" ")[1]);
+                        System.out.println("Le statut de la machine à café est maintenant : " + statusMachine);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
                 }
             }
-        } finally {
-            listener.close();
-        }
+        }).start();
     }
+
 
     public static void demarrageApi() throws IOException {
         int port = 6969;
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         System.out.println("L'api web as bien été ouvert sur: http://localhost:" + port);
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/", new RootHandler());
+        server.createContext("/update-cafe", new Esp8266());
         server.setExecutor(null);
         server.start();
+    }
+
+    public static Map<String, String> queryToMap(String query){
+        Map<String, String> result = new HashMap<String, String>();
+        for (String param : query.split("&")) {
+            String pair[] = param.split("=");
+            if (pair.length>1) {
+                result.put(pair[0], pair[1]);
+            }else{
+                result.put(pair[0], "");
+            }
+        }return result;
     }
 }
